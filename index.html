@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QueueFlow - Gerenciamento de Fila PWA</title>
+    <!-- Carregamento do Tailwind CSS para um design responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuração da fonte Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+    <!-- Manifest PWA (simulado) -->
+    <link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body class="bg-gray-50 min-h-screen transition-all duration-300">
+
+    <div id="app-container" class="max-w-7xl mx-auto p-4 md:p-8">
+        <!-- Título Centralizado -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-5xl font-extrabold text-indigo-700">QueueFlow</h1>
+            <p class="text-gray-500 mt-1">Seu sistema de gerenciamento de filas em tempo real.</p>
+        </header>
+
+        <!-- Container de Visualizações -->
+        <div id="views" class="space-y-12">
+            <!-- 1. Visão do Administrador/QR Code Setup -->
+            <div id="admin-view" class="bg-white p-6 rounded-xl shadow-lg border border-indigo-100 hidden">
+                <h2 class="text-2xl font-bold text-indigo-600 mb-4">Configuração e Admin</h2>
+                <p class="text-sm text-gray-600 mb-4">Para começar, gere o QR Code que os usuários escanearão para entrar na fila.</p>
+
+                <div class="flex flex-col md:flex-row gap-6">
+                    <!-- Geração de QR Code -->
+                    <div class="flex-1 bg-indigo-50 p-4 rounded-lg shadow-inner">
+                        <h3 class="text-xl font-semibold mb-3 text-indigo-800">QR Code de Entrada</h3>
+                        <div id="qrcode-container" class="p-2 bg-white rounded-lg shadow-md flex justify-center">
+                            <!-- O QR Code será gerado aqui -->
+                        </div>
+                        <p class="text-xs text-center text-gray-500 mt-2">Este QR Code leva à URL atual.</p>
+                    </div>
+
+                    <!-- Controles do Admin (Chamada) -->
+                    <div class="flex-1 space-y-4">
+                        <h3 class="text-xl font-semibold text-indigo-800">Controle da Fila</h3>
+                        <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+                            <p class="font-medium text-red-700">Próximo a ser Chamado:</p>
+                            <p id="next-to-call" class="text-2xl font-extrabold text-red-900 truncate">N/A</p>
+                        </div>
+                        <button id="call-next-btn" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg shadow-md hover:bg-green-600 transition duration-150 disabled:bg-gray-400">
+                            Chamar Próximo Número
+                        </button>
+                        <button id="reset-queue-btn" class="w-full bg-red-500 text-white font-bold py-2 rounded-lg shadow-md hover:bg-red-600 transition duration-150">
+                            Resetar Fila
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Nova Seção Gemini -->
+                <div class="mt-8 p-4 bg-purple-50 border border-purple-200 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold text-purple-800 flex items-center mb-3">
+                        Roteiro de Atendimento IA ✨
+                    </h3>
+                    <p class="text-sm text-gray-700 mb-3">Gere um roteiro profissional personalizado para o próximo cliente na fila.</p>
+                    <button id="generate-script-btn" class="w-full bg-purple-600 text-white font-bold py-2 rounded-lg shadow-md hover:bg-purple-700 transition duration-150 disabled:bg-gray-400">
+                        Gerar Roteiro
+                    </button>
+                    <div id="script-output" class="mt-3 p-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 min-h-16">
+                        O roteiro aparecerá aqui.
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Visão do Mobile (PWA do Usuário) -->
+            <div id="mobile-view" class="bg-white p-6 rounded-xl shadow-lg border border-blue-100 hidden">
+                <h2 class="text-2xl font-bold text-blue-600 mb-6">Sua Posição na Fila</h2>
+
+                <!-- Tela de Cadastro/Entrada na Fila -->
+                <div id="join-form" class="space-y-4">
+                    <h3 class="text-xl font-semibold text-gray-700">Entrar na Fila</h3>
+                    <input type="text" id="name-input" placeholder="Nome" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                    <input type="text" id="surname-input" placeholder="Sobrenome" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                    <button id="join-queue-btn" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg shadow-md hover:bg-blue-600 transition duration-150">
+                        Entrar na Fila
+                    </button>
+                </div>
+
+                <!-- Tela de Status na Fila -->
+                <div id="queue-status" class="space-y-6 hidden">
+                    <div class="bg-blue-50 p-4 rounded-xl text-center shadow-inner">
+                        <p class="text-sm font-medium text-blue-700">Seu Número</p>
+                        <p id="my-number" class="text-4xl font-extrabold text-blue-900 mt-1">--</p>
+                        <p id="my-name-display" class="text-lg text-gray-600 mt-1"></p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div class="bg-yellow-50 p-4 rounded-xl shadow-md">
+                            <p class="text-sm font-medium text-yellow-700">Sua Posição</p>
+                            <p id="my-position" class="text-3xl font-bold text-yellow-800 mt-1">--</p>
+                        </div>
+                        <div class="bg-red-50 p-4 rounded-xl shadow-md">
+                            <p class="text-sm font-medium text-red-700">Tempo Estimado</p>
+                            <p id="estimated-time" class="text-3xl font-bold text-red-800 mt-1">-- min</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-100 p-4 rounded-xl text-center shadow-md">
+                        <p class="text-sm font-medium text-gray-600">Último Chamado</p>
+                        <p id="currently-serving" class="text-2xl font-extrabold text-indigo-700 mt-1">N/A</p>
+                    </div>
+
+                    <div id="notification-message" class="p-3 text-sm rounded-lg border border-yellow-300 bg-yellow-100 text-yellow-800 hidden">
+                        Aguardando permissão para Notificações.
+                    </div>
+
+                    <button id="leave-queue-btn" class="w-full bg-gray-300 text-gray-800 font-bold py-2 rounded-lg shadow-md hover:bg-gray-400 transition duration-150">
+                        Sair da Fila
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Visão do Display de TV (Tela Grande) -->
+            <div id="tv-view" class="bg-gray-800 p-8 rounded-2xl shadow-2xl text-white hidden">
+                <h2 class="text-4xl font-extrabold text-yellow-400 text-center mb-6">TV Display - Em Atendimento</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="serving-list">
+                    <!-- Lista de números em atendimento -->
+                    <div class="col-span-1 md:col-span-2 lg:col-span-3 text-center" id="empty-serving-message">
+                        <p class="text-3xl font-semibold text-gray-400 mt-8">Nenhum número em atendimento no momento.</p>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-gray-700 text-center">
+                    <p class="text-xl font-light text-gray-400">Próximos na fila: <span id="next-up-list">...</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mensagem de Erro/Status (Global) -->
+        <div id="status-message" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 p-3 bg-red-600 text-white rounded-lg shadow-xl z-50 transition-opacity duration-300 opacity-0 pointer-events-none">
+            Erro de Conexão.
+        </div>
+    </div>
+
+    <!-- Bibliotecas de Terceiros (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode.js/1.0.0/qrcode.min.js"></script>
+
+    <!-- Firebase SDKs (v11.6.1) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, arrayRemove, arrayUnion, serverTimestamp, setLogLevel, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis globais (fornecidas pelo ambiente)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-queue-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Configuração da API Gemini
+        const GEMINI_API_KEY = "";
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        // Referências do DOM
+        const statusMessage = document.getElementById('status-message');
+        const adminView = document.getElementById('admin-view');
+        const mobileView = document.getElementById('mobile-view');
+        const tvView = document.getElementById('tv-view');
+
+        const joinForm = document.getElementById('join-form');
+        const queueStatus = document.getElementById('queue-status');
+        const joinQueueBtn = document.getElementById('join-queue-btn');
+        const leaveQueueBtn = document.getElementById('leave-queue-btn');
+        const callNextBtn = document.getElementById('call-next-btn');
+        const resetQueueBtn = document.getElementById('reset-queue-btn');
+        const nameInput = document.getElementById('name-input');
+        const surnameInput = document.getElementById('surname-input');
+
+        const myNumberDisplay = document.getElementById('my-number');
+        const myNameDisplay = document.getElementById('my-name-display');
+        const myPositionDisplay = document.getElementById('my-position');
+        const estimatedTimeDisplay = document.getElementById('estimated-time');
+        const currentlyServingDisplay = document.getElementById('currently-serving');
+        const servingListContainer = document.getElementById('serving-list');
+        const nextToCallDisplay = document.getElementById('next-to-call');
+        const emptyServingMessage = document.getElementById('empty-serving-message');
+        const nextUpListDisplay = document.getElementById('next-up-list');
+        const notificationMessage = document.getElementById('notification-message');
+        
+        // Novas referências Gemini
+        const generateScriptBtn = document.getElementById('generate-script-btn');
+        const scriptOutput = document.getElementById('script-output');
+
+        // Constantes do Firestore
+        const PUBLIC_QUEUE_PATH = `artifacts/${appId}/public/data/queue_members`;
+        const PUBLIC_CONFIG_PATH = `artifacts/${appId}/public/data/queue_config`;
+        const PRIVATE_USER_DATA_PATH = (uid) => `artifacts/${appId}/users/${uid}/queue_data`;
+
+        // Estado local
+        let myQueueData = null; // Armazena o número, nome e docId do usuário
+        let queueMembers = []; // Todos os membros da fila (ordenados)
+        let queueConfig = { lastNumber: 0, servedNumbers: [], startTime: serverTimestamp() }; // Configuração da fila
+        let serviceTimeHistory = []; // Histórico de tempo de serviço para cálculo de média
+
+        // ------------------
+        // Funções Utilitárias
+        // ------------------
+
+        function showStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 p-3 text-white rounded-lg shadow-xl z-50 transition-opacity duration-300 ${isError ? 'bg-red-600' : 'bg-green-600'} opacity-100`;
+            setTimeout(() => {
+                statusMessage.classList.remove('opacity-100');
+                statusMessage.classList.add('opacity-0');
+            }, 3000);
+        }
+
+        function calculateWaitTime(myPosition, history) {
+            // Apenas calcula se houver histórico suficiente (ex: 5 atendimentos)
+            if (history.length < 5) return '10-15'; // Estimativa padrão
+            
+            // Calcula o tempo médio de serviço por número
+            const totalDurationMs = history.reduce((sum, entry) => sum + entry.durationMs, 0);
+            const avgServiceTimeMs = totalDurationMs / history.length;
+            
+            // Posição na fila * tempo médio de serviço
+            const estimatedMs = (myPosition - 1) * avgServiceTimeMs;
+            
+            // Converte para minutos e arredonda
+            return Math.ceil(estimatedMs / 60000);
+        }
+        
+        // Função utilitária para obter estimativa numérica para a IA
+        function getNumericWaitTimeEstimate(queueLength, history) {
+            if (history.length < 5) return 10; // Estimativa padrão numérica
+            
+            const totalDurationMs = history.reduce((sum, entry) => sum + entry.durationMs, 0);
+            const avgServiceTimeMs = totalDurationMs / history.length;
+            
+            const estimatedMs = (queueLength - 1) * avgServiceTimeMs;
+            
+            return Math.ceil(estimatedMs / 60000);
+        }
+
+        // ------------------
+        // Lógica de Renderização
+        // ------------------
+
+        function renderServingList() {
+            servingListContainer.innerHTML = '';
+            
+            const currentlyServingNumbers = queueConfig.servedNumbers || [];
+            
+            if (currentlyServingNumbers.length === 0) {
+                emptyServingMessage.classList.remove('hidden');
+            } else {
+                emptyServingMessage.classList.add('hidden');
+                
+                currentlyServingNumbers.forEach(item => {
+                    const number = typeof item === 'object' ? item.number : item; // Compatibilidade com estrutura antiga/nova
+                    const element = document.createElement('div');
+                    element.className = 'bg-yellow-500 text-center p-6 rounded-xl shadow-lg transform transition duration-300 hover:scale-105';
+                    element.innerHTML = `
+                        <p class="text-lg font-medium text-gray-900">CHAMANDO</p>
+                        <p class="text-6xl font-extrabold text-white mt-2">${number}</p>
+                    `;
+                    servingListContainer.appendChild(element);
+                });
+            }
+        }
+
+        function renderMobileStatus() {
+            if (!myQueueData) {
+                joinForm.classList.remove('hidden');
+                queueStatus.classList.add('hidden');
+                return;
+            }
+
+            joinForm.classList.add('hidden');
+            queueStatus.classList.remove('hidden');
+            
+            // 1. Seu Número e Nome
+            myNumberDisplay.textContent = myQueueData.number;
+            myNameDisplay.textContent = myQueueData.name;
+
+            // 2. Sua Posição
+            // A posição é o índice (base 1) na fila (excluindo os já servidos)
+            const activeQueue = queueMembers.filter(m => m.status === 'waiting');
+            const myIndex = activeQueue.findIndex(m => m.number === myQueueData.number);
+            const myPosition = myIndex >= 0 ? myIndex + 1 : 0;
+            
+            myPositionDisplay.textContent = myPosition > 0 ? myPosition : 'Fila Fechada';
+
+            // 3. Último Chamado / Em Atendimento
+            const lastServed = queueConfig.servedNumbers.length > 0 
+                ? queueConfig.servedNumbers[queueConfig.servedNumbers.length - 1].number
+                : 'N/A';
+            currentlyServingDisplay.textContent = lastServed;
+
+            // 4. Tempo Estimado
+            const waitTime = calculateWaitTime(myPosition, serviceTimeHistory);
+            estimatedTimeDisplay.textContent = myPosition > 0 ? `${waitTime} min` : '0 min';
+
+            // Verifica se o usuário foi chamado (simula push)
+            const called = queueConfig.servedNumbers.some(item => 
+                (typeof item === 'object' ? item.number : item) === myQueueData.number
+            );
+
+            if (called && myQueueData.status !== 'called') {
+                myQueueData.status = 'called';
+                showStatus(`SEU NÚMERO (${myQueueData.number}) FOI CHAMADO!`, false);
+                // Simulação de Push Notification
+                if (Notification.permission === 'granted') {
+                    new Notification('QueueFlow: Sua Vez!', {
+                        body: `Dirija-se ao atendimento. Seu número é ${myQueueData.number}.`,
+                        icon: 'https://placehold.co/192x192/0000FF/FFFFFF?text=Q',
+                        vibrate: [200, 100, 200]
+                    });
+                }
+            }
+            // Atualiza o estado visual do botão
+            leaveQueueBtn.textContent = called ? 'Confirmar Atendimento / Sair' : 'Sair da Fila';
+            if (called) {
+                leaveQueueBtn.classList.remove('bg-gray-300');
+                leaveQueueBtn.classList.add('bg-green-500', 'text-white');
+            } else {
+                leaveQueueBtn.classList.add('bg-gray-300');
+                leaveQueueBtn.classList.remove('bg-green-500', 'text-white');
+            }
+        }
+
+        function renderAdminControls() {
+            // Próximo a ser chamado
+            const nextInQueue = queueMembers.find(m => m.status === 'waiting');
+            if (nextInQueue) {
+                nextToCallDisplay.textContent = `#${nextInQueue.number} (${nextInQueue.name})`;
+                callNextBtn.disabled = false;
+                generateScriptBtn.disabled = false;
+            } else {
+                nextToCallDisplay.textContent = 'N/A (Fila Vazia)';
+                callNextBtn.disabled = true;
+                generateScriptBtn.disabled = true;
+                scriptOutput.innerHTML = '<p class="text-gray-500">O roteiro aparecerá aqui.</p>';
+            }
+            
+            // Lista de próximos para o TV Display
+            const nextUp = queueMembers.filter(m => m.status === 'waiting').slice(0, 5);
+            nextUpListDisplay.textContent = nextUp.map(m => `#${m.number}`).join(', ') || 'Ninguém esperando.';
+
+            // Renderiza a lista de atendimento (TV View)
+            renderServingList();
+        }
+
+        function determineView() {
+            // Logica simples para detectar o tipo de view com base na URL
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'tv') {
+                document.title = 'QueueFlow - TV Display';
+                adminView.classList.add('hidden');
+                mobileView.classList.add('hidden');
+                tvView.classList.remove('hidden');
+                return 'tv';
+            } else if (urlParams.get('view') === 'admin') {
+                document.title = 'QueueFlow - Admin';
+                tvView.classList.add('hidden');
+                mobileView.classList.add('hidden');
+                adminView.classList.remove('hidden');
+                return 'admin';
+            } else {
+                // View mobile padrão (usuário)
+                tvView.classList.add('hidden');
+                adminView.classList.add('hidden');
+                mobileView.classList.remove('hidden');
+                return 'mobile';
+            }
+        }
+
+        // ------------------
+        // Lógica da Fila (Firestore)
+        // ------------------
+        
+        // 1. Tentativa de Carregar Dados Locais
+        function loadLocalQueueData() {
+            const storedData = localStorage.getItem('queueflow_mydata');
+            if (storedData) {
+                try {
+                    myQueueData = JSON.parse(storedData);
+                    renderMobileStatus();
+                    // Atualiza o userId para tentar reconectar com o mesmo perfil
+                    // Note: Isso só funciona se o token de auth for o mesmo, mas ajuda a manter o número
+                    userId = myQueueData.uid; 
+                } catch (e) {
+                    console.error('Erro ao carregar dados locais:', e);
+                    localStorage.removeItem('queueflow_mydata');
+                }
+            }
+        }
+
+        // 2. Entrar na Fila
+        async function joinQueue() {
+            const name = nameInput.value.trim();
+            const surname = surnameInput.value.trim();
+            
+            if (!name || !surname) {
+                showStatus('Por favor, preencha nome e sobrenome.', true);
+                return;
+            }
+            
+            joinQueueBtn.disabled = true;
+            joinQueueBtn.textContent = 'Aguarde...';
+
+            try {
+                // 1. Pega e incrementa o último número
+                const configRef = doc(db, PUBLIC_CONFIG_PATH, 'main');
+                const configSnap = await getDoc(configRef);
+                
+                let newNumber = 1;
+                if (configSnap.exists()) {
+                    const currentConfig = configSnap.data();
+                    newNumber = (currentConfig.lastNumber || 0) + 1;
+                    await updateDoc(configRef, { lastNumber: newNumber });
+                } else {
+                    await setDoc(configRef, { lastNumber: newNumber, servedNumbers: [], startTime: serverTimestamp() });
+                }
+
+                // 2. Adiciona o novo membro à fila
+                const queueRef = collection(db, PUBLIC_QUEUE_PATH);
+                const newMember = {
+                    number: newNumber,
+                    name: `${name} ${surname}`,
+                    uid: userId, // ID do usuário logado (anônimo ou com token)
+                    status: 'waiting', // 'waiting', 'called', 'served', 'missed'
+                    joinedAt: serverTimestamp(),
+                };
+                const docRef = await addDoc(queueRef, newMember);
+
+                // 3. Salva os dados localmente e no Firestore privado do usuário
+                myQueueData = {
+                    docId: docRef.id,
+                    number: newNumber,
+                    name: `${name} ${surname}`,
+                    uid: userId,
+                    status: 'waiting',
+                };
+                
+                localStorage.setItem('queueflow_mydata', JSON.stringify(myQueueData));
+                
+                // Salva referência no dado privado para recuperação
+                const userDocRef = doc(db, PRIVATE_USER_DATA_PATH(userId), 'current_queue');
+                await setDoc(userDocRef, myQueueData);
+                
+                renderMobileStatus();
+                showStatus(`Você entrou na fila com o número #${newNumber}!`);
+                requestNotificationPermission(); // Pede permissão de push
+                
+            } catch (error) {
+                console.error('Erro ao entrar na fila:', error);
+                showStatus('Erro ao entrar na fila. Tente novamente.', true);
+            } finally {
+                joinQueueBtn.disabled = false;
+                joinQueueBtn.textContent = 'Entrar na Fila';
+            }
+        }
+
+        // 3. Chamar Próximo Número (Função Admin)
+        async function callNextNumber() {
+            callNextBtn.disabled = true;
+            const nextInQueue = queueMembers.find(m => m.status === 'waiting');
+
+            if (!nextInQueue) {
+                showStatus('Ninguém na fila para chamar.', true);
+                callNextBtn.disabled = false;
+                return;
+            }
+
+            try {
+                const queueRef = doc(db, PUBLIC_QUEUE_PATH, nextInQueue.docId);
+                const configRef = doc(db, PUBLIC_CONFIG_PATH, 'main');
+                
+                // 1. Marca o membro como 'called'
+                await updateDoc(queueRef, { status: 'called' });
+
+                // 2. Adiciona o número à lista de "servidos" (em atendimento) na config
+                // Usamos arrayUnion para garantir que só seja adicionado uma vez.
+                const newServedItem = { number: nextInQueue.number, calledAt: serverTimestamp() };
+                await updateDoc(configRef, {
+                    servedNumbers: arrayUnion(newServedItem)
+                });
+
+                showStatus(`Chamado o número #${nextInQueue.number}.`);
+            } catch (error) {
+                console.error('Erro ao chamar o próximo:', error);
+                showStatus('Erro ao chamar o próximo número.', true);
+            } finally {
+                // A desabilitação é temporária, o onSnapshot reabilitará
+            }
+        }
+        
+        // 4. Sair/Finalizar Atendimento (Mobile e Admin)
+        async function leaveQueue() {
+            if (!myQueueData) return;
+            
+            leaveQueueBtn.disabled = true;
+            leaveQueueBtn.textContent = 'Saindo...';
+
+            try {
+                const queueMemberRef = doc(db, PUBLIC_QUEUE_PATH, myQueueData.docId);
+                const configRef = doc(db, PUBLIC_CONFIG_PATH, 'main');
+                const userDocRef = doc(db, PRIVATE_USER_DATA_PATH(userId), 'current_queue');
+
+                // 1. Marca o membro como 'served'
+                await updateDoc(queueMemberRef, { 
+                    status: 'served',
+                    servedAt: serverTimestamp() 
+                });
+                
+                // 2. Remove da lista de 'servedNumbers' e calcula o tempo de serviço
+                const servedList = queueConfig.servedNumbers || [];
+                const servedItem = servedList.find(item => 
+                    (typeof item === 'object' ? item.number : item) === myQueueData.number
+                );
+
+                if (servedItem && servedItem.calledAt) {
+                    // Calcula a duração do serviço (do chamado até a saída)
+                    const calledTimeMs = servedItem.calledAt.toMillis();
+                    const servedTimeMs = Date.now();
+                    const durationMs = servedTimeMs - calledTimeMs;
+                    
+                    // Remove da lista de atendidos
+                    await updateDoc(configRef, {
+                        servedNumbers: arrayRemove(servedItem),
+                        // Adiciona ao histórico de tempo de serviço
+                        serviceTimeHistory: arrayUnion({ durationMs: durationMs, number: myQueueData.number })
+                    });
+                } else if (servedItem) {
+                    // Remove item simples se não tiver timestamp
+                    await updateDoc(configRef, {
+                        servedNumbers: arrayRemove(servedItem)
+                    });
+                }
+
+
+                // 3. Limpa o estado local
+                localStorage.removeItem('queueflow_mydata');
+                await deleteDoc(userDocRef);
+                myQueueData = null;
+                
+                renderMobileStatus();
+                showStatus('Você saiu da fila. Obrigado!');
+                
+            } catch (error) {
+                console.error('Erro ao sair da fila:', error);
+                showStatus('Erro ao sair da fila.', true);
+            } finally {
+                leaveQueueBtn.disabled = false;
+                leaveQueueBtn.textContent = 'Sair da Fila';
+            }
+        }
+        
+        // 5. Resetar a Fila (Função Admin)
+        async function resetQueue() {
+            if (!confirm('Tem certeza que deseja RESETAR TODA A FILA? Isso limpará todos os dados!')) {
+                return;
+            }
+            try {
+                // 1. Limpa a coleção de membros da fila
+                const queueRef = collection(db, PUBLIC_QUEUE_PATH);
+                const qSnapshot = await getDocs(queueRef);
+                const batch = db.batch();
+                qSnapshot.docs.forEach((d) => batch.delete(d.ref));
+                await batch.commit();
+
+                // 2. Reseta a configuração
+                const configRef = doc(db, PUBLIC_CONFIG_PATH, 'main');
+                await setDoc(configRef, { lastNumber: 0, servedNumbers: [], startTime: serverTimestamp(), serviceTimeHistory: [] });
+
+                // 3. Limpa o estado local do admin
+                showStatus('Fila resetada com sucesso.');
+            } catch (error) {
+                console.error('Erro ao resetar a fila:', error);
+                showStatus('Erro ao resetar a fila.', true);
+            }
+        }
+        
+        // 6. Gerar Roteiro de Atendimento (Função Gemini)
+        async function generateScript() {
+            const nextInQueue = queueMembers.find(m => m.status === 'waiting');
+
+            if (!nextInQueue) {
+                scriptOutput.innerHTML = '<p class="text-red-500">Ninguém na fila para gerar roteiro.</p>';
+                return;
+            }
+
+            generateScriptBtn.disabled = true;
+            const originalText = generateScriptBtn.textContent;
+            generateScriptBtn.textContent = 'Gerando...';
+            scriptOutput.innerHTML = '<p class="text-gray-500 italic">Aguarde, contactando IA...</p>';
+
+            // Preparar dados para o prompt
+            const nextUserName = nextInQueue.name.split(' ')[0]; // Apenas o primeiro nome
+            const nextUserNumber = nextInQueue.number;
+            const activeQueueLength = queueMembers.filter(m => m.status === 'waiting').length;
+
+            const avgWaitMinutes = getNumericWaitTimeEstimate(activeQueueLength, serviceTimeHistory);
+            const estimatedWait = activeQueueLength > 1 ? `${avgWaitMinutes} minutos.` : `zero minutos.`;
+
+            // Construção do prompt
+            const systemPrompt = "Você é um atendente de recepção profissional, empático e eficiente. Seu objetivo é fornecer um roteiro de boas-vindas conciso (máximo 4 frases) para um cliente que será chamado ao atendimento. O roteiro deve ser motivador e direto.";
+            
+            const userQuery = `O próximo cliente a ser atendido é o(a) ${nextUserName}, com o número ${nextUserNumber}. A fila tem ${activeQueueLength} pessoas e o tempo de espera estimado foi de aproximadamente ${estimatedWait}. Crie um roteiro que o receba e o oriente. Use o nome do cliente.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            // Chamada à API
+            try {
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Erro: Não foi possível gerar o roteiro.";
+                
+                scriptOutput.innerHTML = `<p class="font-medium">Roteiro Sugerido:</p><p class="mt-1 whitespace-pre-wrap">${text}</p>`;
+
+            } catch (e) {
+                console.error('Erro na chamada da API Gemini:', e);
+                scriptOutput.innerHTML = '<p class="text-red-500">Ocorreu um erro na geração do roteiro. Verifique a chave API ou a conexão.</p>';
+            } finally {
+                generateScriptBtn.textContent = originalText;
+                generateScriptBtn.disabled = false;
+            }
+        }
+
+
+        // ------------------
+        // Sincronização em Tempo Real (onSnapshot)
+        // ------------------
+
+        function setupRealtimeListener() {
+            if (!db || !isAuthReady) return;
+
+            // Listener 1: Membros da Fila (Para posição e controles admin)
+            const queueQuery = query(collection(db, PUBLIC_QUEUE_PATH));
+            onSnapshot(queueQuery, (snapshot) => {
+                queueMembers = [];
+                snapshot.forEach(doc => {
+                    // Adiciona o docId para facilitar updates/deletes
+                    queueMembers.push({ docId: doc.id, ...doc.data() });
+                });
+                
+                // Ordena os membros pelo número de entrada
+                queueMembers.sort((a, b) => a.number - b.number);
+                
+                // Verifica se o usuário atual saiu ou foi servido/perdido (e o estado local não atualizou)
+                if (myQueueData) {
+                    const latestData = queueMembers.find(m => m.number === myQueueData.number);
+                    if (latestData && latestData.status !== myQueueData.status) {
+                        myQueueData.status = latestData.status;
+                        localStorage.setItem('queueflow_mydata', JSON.stringify(myQueueData));
+                    } else if (!latestData && myQueueData) {
+                        // Caso o número do usuário tenha sido deletado (ex: por reset)
+                        localStorage.removeItem('queueflow_mydata');
+                        myQueueData = null;
+                        showStatus('Sua entrada na fila foi removida.');
+                    }
+                }
+                
+                renderMobileStatus();
+                renderAdminControls();
+
+            }, (error) => {
+                console.error('Erro no Listener de Fila:', error);
+                showStatus('Perda de conexão com a fila!', true);
+            });
+            
+            // Listener 2: Configuração da Fila (Para número em atendimento e histórico)
+            const configRef = doc(db, PUBLIC_CONFIG_PATH, 'main');
+            onSnapshot(configRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    queueConfig = docSnap.data();
+                    serviceTimeHistory = queueConfig.serviceTimeHistory || [];
+                } else {
+                    queueConfig = { lastNumber: 0, servedNumbers: [], startTime: serverTimestamp(), serviceTimeHistory: [] };
+                }
+                
+                renderMobileStatus();
+                renderAdminControls();
+                
+            }, (error) => {
+                console.error('Erro no Listener de Config:', error);
+            });
+        }
+
+
+        // ------------------
+        // PWA Features e Init
+        // ------------------
+        
+        // Registro do Service Worker (Simulação)
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                // Aqui você registraria o service-worker.js
+                // Ex: navigator.serviceWorker.register('/service-worker.js');
+                // Para o PWA de arquivo único, apenas simulamos a presença.
+                console.log('Service Worker: Registro simulado. Para offline, crie o arquivo service-worker.js.');
+            }
+        }
+        
+        // Push Notifications (Simulação - Requer servidor Node.js real)
+        function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                console.warn('Este navegador não suporta notificações.');
+                notificationMessage.textContent = 'Notificações não suportadas neste dispositivo.';
+                return;
+            }
+            
+            if (Notification.permission === 'default') {
+                notificationMessage.classList.remove('hidden');
+                Notification.requestPermission().then(permission => {
+                    notificationMessage.classList.add('hidden');
+                    if (permission === 'granted') {
+                        // O registro de PushSubscription deve ser enviado ao seu backend Node.js real.
+                        console.log('Permissão de Notificação concedida. Pronta para receber (via backend real).');
+                    } else {
+                        console.log('Permissão de Notificação negada.');
+                        notificationMessage.textContent = 'Notificações negadas.';
+                        notificationMessage.classList.remove('hidden');
+                    }
+                });
+            } else if (Notification.permission === 'denied') {
+                notificationMessage.textContent = 'Notificações bloqueadas pelo navegador.';
+                notificationMessage.classList.remove('hidden');
+            }
+        }
+        
+        // Geração de QR Code
+        function generateQRCode() {
+            const container = document.getElementById('qrcode-container');
+            const url = window.location.origin + window.location.pathname; // URL base sem parâmetros de view
+            
+            if (container.querySelector('canvas')) return; // Evita duplicidade
+
+            new QRCode(container, {
+                text: url,
+                width: 150,
+                height: 150,
+                colorDark : "#4f46e5", // Indigo
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+
+        // ------------------
+        // Inicialização Principal
+        // ------------------
+
+        async function initFirebase() {
+            try {
+                setLogLevel('debug'); // Ativa logs do Firestore
+                
+                // 1. Inicializa App e Serviços
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // 2. Autenticação (Usa token se houver, senão anônima)
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // 3. Listener de Estado de Autenticação
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        
+                        // Tenta carregar dados do usuário autenticado se não houver local
+                        if (!myQueueData) {
+                            // Tenta carregar dados de fila do usuário logado (privado)
+                            const userDocRef = doc(db, PRIVATE_USER_DATA_PATH(userId), 'current_queue');
+                            getDoc(userDocRef).then(snap => {
+                                if (snap.exists()) {
+                                    myQueueData = snap.data();
+                                    localStorage.setItem('queueflow_mydata', JSON.stringify(myQueueData));
+                                }
+                                setupRealtimeListener(); // Inicia listeners após auth e recuperação de dados
+                            }).catch(e => {
+                                console.error('Erro ao recuperar dados privados:', e);
+                                setupRealtimeListener();
+                            });
+                        } else {
+                             setupRealtimeListener(); // Inicia listeners com dados locais
+                        }
+                        
+                        
+                    } else {
+                        // O usuário não está logado ou saiu
+                        userId = null;
+                        isAuthReady = false;
+                        console.log('Usuário não autenticado.');
+                    }
+                });
+
+            } catch (error) {
+                console.error('Erro de inicialização do Firebase:', error);
+                showStatus('Falha ao inicializar o sistema de dados.', true);
+            }
+        }
+
+        // ------------------
+        // Event Listeners
+        // ------------------
+        
+        joinQueueBtn.addEventListener('click', joinQueue);
+        leaveQueueBtn.addEventListener('click', leaveQueue);
+        callNextBtn.addEventListener('click', callNextNumber);
+        resetQueueBtn.addEventListener('click', resetQueue);
+        generateScriptBtn.addEventListener('click', generateScript);
+
+
+        window.onload = () => {
+            // 1. Determina a visualização e adapta a URL/UI
+            const currentView = determineView();
+            
+            // 2. Carrega dados de fila salvos localmente (para PWA)
+            if (currentView === 'mobile') {
+                loadLocalQueueData();
+                requestNotificationPermission();
+            } else if (currentView === 'admin') {
+                generateQRCode();
+            }
+
+            // 3. Inicia o Firebase
+            initFirebase();
+            
+            // 4. Registra Service Worker
+            registerServiceWorker();
+        };
+
+    </script>
+</body>
+</html>
